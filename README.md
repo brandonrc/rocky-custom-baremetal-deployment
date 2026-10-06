@@ -1,3 +1,8 @@
+> **This repository has moved.** The code and documentation now live in the Artifact Keeper walkthroughs repository:
+> [github.com/artifact-keeper/walkthroughs](https://github.com/artifact-keeper/walkthroughs/tree/main/rocky-linux-image-mode-bare-metal), with the narrated guide at
+> [artifact-keeper.github.io/walkthroughs/rocky-linux-image-mode-bare-metal](https://artifact-keeper.github.io/walkthroughs/rocky-linux-image-mode-bare-metal/).
+> This repository is archived and kept for history and for the issues that reference it.
+
 # Rocky Linux image mode on bare metal, with Artifact Keeper as the source of truth
 
 Proof of concept behind the OpenTeams engineering blog post
