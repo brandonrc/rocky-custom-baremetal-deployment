@@ -3,6 +3,9 @@
 Proof of concept behind the OpenTeams engineering blog post
 *Rocky Linux Image Mode on Bare Metal, with Artifact Keeper as the Source of Truth*.
 
+**Documentation:** <https://brandonrc.github.io/rocky-custom-baremetal-deployment/>
+(setup, walkthrough, architecture, Artifact Keeper notes, timings and the findings).
+
 One [Artifact Keeper](https://github.com/artifact-keeper/artifact-keeper) instance holds
 everything an edge node boots from: Rocky Linux 10 and EPEL RPMs (proxy repos), RKE2
 RPMs (proxy), our own `edge-site-config` RPM (hosted), a self-built Rocky 10 bootc base
@@ -35,11 +38,15 @@ registry-1.docker.io┘   rpm-* / oci-*          └─> bootc upgrade, RKE2 ima
 | `rpms/` | `edge-site-config` spec (RKE2 config, registries.yaml, MOTD, demo manifest, insecure-registry drop-in), built and `rpmsign`ed in a Rocky container, uploaded to `rpm-edge-site` |
 | `image/` | `Containerfile` for `oci-bootc/rocky-edge:10.2-<rel>` with the node's signature policy; build gate that fails on any non-Artifact-Keeper repo or key URL and on `gpgcheck=0`; `bootc container lint --fatal-warnings`; push + cosign sign |
 | `deploy/` | Kickstart template (signature policy in `%pre`), pxeboot media + stage2 cache, QEMU harness: `vm-install`, `vm-boot`, `vm-verify`, `vm-upgrade`, `vm-upgrade-unsigned`, `vm-rollback`, `vm-ssh`, `vm-status` |
-| `docs/` | `PLAN.md` (design), `findings-image.md`, `findings-deploy.md` and `findings-signing.md` (everything that broke, with exact errors and timings) |
+| `docs/` | `PLAN.md` (design), `findings-image.md`, `findings-deploy.md` and `findings-signing.md` (everything that broke, with exact errors and timings), plus the pages of the [documentation site](https://brandonrc.github.io/rocky-custom-baremetal-deployment/) (`mkdocs.yml`) |
 
 Each directory has its own README with details and the deviations from upstream docs.
 
 ## Requirements
+
+See [docs/environment.md](docs/environment.md) for the full environment setup: checking for
+and enabling KVM, running without it, rootless podman, the user-level files the scripts write
+under `~/.config/containers/` (and how to undo them), and the ports used.
 
 - Linux with rootless podman 5.x (`podman compose` or docker-compose), skopeo, cosign
   (tested with 3.1.3), gpg, jq, qemu-system-x86_64, edk2-ovmf, curl, python3. No sudo is
