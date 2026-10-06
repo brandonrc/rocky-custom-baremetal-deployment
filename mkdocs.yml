@@ -1,0 +1,75 @@
+site_name: Rocky Linux image mode on bare metal
+site_description: >-
+  Proof of concept: one Artifact Keeper instance as the source of truth for
+  Rocky Linux 10 bootc edge nodes running RKE2, with every artifact signed and verified.
+site_author: Brandon Geraci
+site_url: https://brandonrc.github.io/rocky-custom-baremetal-deployment/
+repo_url: https://github.com/brandonrc/rocky-custom-baremetal-deployment
+repo_name: brandonrc/rocky-custom-baremetal-deployment
+edit_uri: edit/main/docs/
+docs_dir: docs
+copyright: MIT licensed. Vendored rocky-bootc recipe under its own license.
+
+theme:
+  name: material
+  features:
+    - content.code.copy
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - search.highlight
+    - search.suggest
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+plugins:
+  - search
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+nav:
+  - Home: index.md
+  - Setting up the environment: environment.md
+  - Walkthrough: walkthrough.md
+  - Architecture: architecture.md
+  - Artifact Keeper notes: artifact-keeper-notes.md
+  - Timings: timings.md
+  - Design:
+      - Plan: PLAN.md
+  - Findings:
+      - Image layer: findings-image.md
+      - Deploy layer: findings-deploy.md
+      - Signing (iteration 2): findings-signing.md
