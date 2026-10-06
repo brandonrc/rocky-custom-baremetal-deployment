@@ -1,0 +1,50 @@
+# Kickstart template for an image-mode (bootc) Rocky Linux 10 edge node.
+# Rendered by deploy/render-ks.sh into deploy/state/www/ks.cfg:
+#   @REGISTRY@  registry host:port as seen from the VM   (default 10.0.2.2:30080)
+#   @IMAGE@     image path inside the registry            (default oci-bootc/rocky-edge:10)
+#   @SSH_KEY@   contents of the operator's public key     (read at render time, never committed)
+#   @HOSTNAME@  node hostname                             (default edge-node-01)
+#
+# Install method: `ostreecontainer`, NOT the newer `bootc` kickstart command.
+# On Rocky 10.2 the `bootc` command leaves /root/.ssh and /etc/resolv.conf with
+# the wrong SELinux labels (sshd and NetworkManager hit AVC denials on first boot).
+text
+lang en_US.UTF-8
+keyboard us
+timezone UTC --utc
+network --bootproto=dhcp --device=link --activate --hostname=@HOSTNAME@
+
+zerombr
+clearpart --all --initlabel --disklabel=gpt
+reqpart --add-boot
+part / --grow --fstype=xfs
+
+# The registry is plain HTTP (PoC). Anaconda's image pull honours registries.conf,
+# so mark it insecure inside the installer environment before the payload is fetched.
+%pre
+mkdir -p /etc/containers/registries.conf.d
+cat > /etc/containers/registries.conf.d/50-poc-insecure.conf <<'EOR'
+[[registry]]
+location = "@REGISTRY@"
+insecure = true
+EOR
+%end
+
+ostreecontainer --url=@REGISTRY@/@IMAGE@ --transport=registry --no-signature-verification
+
+rootpw --lock
+sshkey --username=root "@SSH_KEY@"
+
+# Belt and braces: the edge image bakes the same drop-in, but writing it into the
+# installed /etc too means `bootc upgrade` works even against an image that lacks it.
+%post
+mkdir -p /etc/containers/registries.conf.d
+cat > /etc/containers/registries.conf.d/50-poc-insecure.conf <<'EOR'
+[[registry]]
+location = "@REGISTRY@"
+insecure = true
+EOR
+restorecon -R /etc/containers/registries.conf.d || true
+%end
+
+reboot
