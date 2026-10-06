@@ -30,6 +30,11 @@ section() { printf '\n=== %s ===\n' "$*"; }
 section "bootc status";       vssh 'bootc status'
 section "getenforce";         vssh 'getenforce'
 section "insecure registry drop-ins"; vssh "grep -H -A2 '^\\[\\[registry\\]\\]' /etc/containers/registries.conf.d/*.conf" || true
+section "image signature policy (bootc upgrade)"
+vssh "grep -h '^container-image-reference' /ostree/deploy/*/deploy/*.origin | sort -u; \
+      python3 -c 'import json;p=json.load(open(\"/etc/containers/policy.json\"));print(\"default:\",p[\"default\"]);[print(k,v) for k,v in p[\"transports\"][\"docker\"].items() if \"30080\" in k]' 2>/dev/null \
+      || grep -A3 '30080' /etc/containers/policy.json; \
+      sha256sum /etc/pki/containers/edge-cosign.pub" || true
 section "$K8S service";       vssh "systemctl is-active $K8S_UNIT" || true
 
 if (( WAIT_READY > 0 )); then

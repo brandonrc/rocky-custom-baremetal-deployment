@@ -3,7 +3,8 @@
 Rocky publishes no official bootc image. This directory builds one from the
 RESF SIG/Containers recipe (`git.resf.org/sig_containers/rocky-bootc`, branch
 `r10`) with **rootless podman**, with every RPM fetched through Artifact Keeper,
-and pushes it to the hosted OCI repo:
+and pushes it to the hosted OCI repo, then cosign-signs the pushed digest
+(`signing/sign-image.sh`; the edge image build refuses an unsigned base):
 
 | Tag | Meaning |
 |---|---|
@@ -17,7 +18,7 @@ and pushes it to the hosted OCI repo:
 | `upstream/rocky-bootc/` | Vendored, unmodified copy of the recipe with its `fedora-bootc` submodule flattened in (no `.git`) |
 | `UPSTREAM_COMMIT` | The two upstream commits the vendored copy matches |
 | `Containerfile` | Upstream `Containerfile` with the three local changes listed in its header |
-| `build.sh` | Stages upstream + our Containerfile + an AK-only repo file into `.work/ctx`, builds, lints, pushes |
+| `build.sh` | Stages upstream + our Containerfile + an AK-only repo file (gpgcheck=1, repo_gpgcheck=1, in-image Rocky key) into `.work/ctx`, builds, lints, pushes (`--remove-signatures`), signs |
 
 ## Usage
 
@@ -28,7 +29,14 @@ MANIFEST=standard PUSH=0 base/build.sh   # upstream's default manifest, no push
 ```
 
 Needs: Artifact Keeper up and `registry/bootstrap.sh` run (uses
-`registry/out/edge.repo.in` and `registry/.ak-token`).
+`registry/out/edge.repo.in` and `registry/.ak-token`), and `make keys` (cosign key).
+
+`podman push --remove-signatures` is needed once the local base has been pulled through
+the signature policy (it then carries its sigstore signatures, and pushing from
+containers-storage fails with `Would invalidate signatures`). The digest
+(`sha256:c85c88d4...`) did not change; the signature lives in `oci-bootc` as the tag
+`sha256-c85c88d4...326298a.sig`. `oci-bootc/rocky-bootc-base:unsigned` (same layers,
+Docker v2s2 manifest, different digest, no signature) is the negative test.
 
 ## What is changed vs upstream
 

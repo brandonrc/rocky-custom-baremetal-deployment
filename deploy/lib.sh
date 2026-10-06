@@ -17,9 +17,14 @@ IMAGE_REPO="${IMAGE_REPO:-oci-bootc}"
 IMAGE="${IMAGE:-rocky-edge:10}"
 IMAGE_REF="$IMAGE_REPO/$IMAGE"
 NODE_HOSTNAME="${NODE_HOSTNAME:-edge-node-01}"
+# cosign public key in Artifact Keeper (signing/publish-keys.sh), fetched by kickstart %pre.
+KEY_URL="${KEY_URL:-http://$REGISTRY/api/v1/repositories/raw-edge-keys/download/edge-cosign.pub}"
 
 # Install media: Rocky 10.2 pxeboot kernel/initrd + stage2 straight from the mirror.
 ROCKY_TREE="${ROCKY_TREE:-https://dl.rockylinux.org/pub/rocky/10.2/BaseOS/x86_64/os}"
+# Where the installer gets stage2 (install.img, 750 MB): "local" = cached by
+# fetch-media.sh and served by serve-ks.sh (default), "mirror" = straight from ROCKY_TREE.
+STAGE2="${STAGE2:-local}"
 
 # VM shape. TCG is slow; more vCPUs help (thread=multi).
 VM_SMP="${VM_SMP:-6}"
@@ -28,6 +33,7 @@ VM_DISK_SIZE="${VM_DISK_SIZE:-40G}"
 SSH_PORT="${SSH_PORT:-2222}"
 KS_PORT="${KS_PORT:-8000}"
 KS_BIND="${KS_BIND:-0.0.0.0}"
+if [[ "$STAGE2" == local ]]; then STAGE2_URL="http://10.0.2.2:$KS_PORT/os/"; else STAGE2_URL="$ROCKY_TREE/"; fi
 SSH_KEY="${SSH_KEY:-$HOME/.ssh/id_ed25519}"
 SSH_PUBKEY="${SSH_PUBKEY:-$SSH_KEY.pub}"
 

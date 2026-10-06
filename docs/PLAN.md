@@ -84,3 +84,26 @@ Makefile    registry-up -> base -> rpm -> image -> vm-install -> vm-boot -> vm-u
 5. Kickstart onto bare metal; `ostreecontainer` vs `bootc` finding.
 6. Day-2: upgrade and rollback.
 7. Timings, gotchas, what we would do differently.
+
+## Iteration 2 (2026-10-06): sign everything, verify everywhere
+
+Goal: no `--no-signature-verification`, no `gpgcheck=0`, anywhere. Artifact Keeper stores the
+signatures and the public keys; every consumer verifies.
+
+| Artifact | Signed by | Signature lives in | Verified by |
+|---|---|---|---|
+| `edge-site-config` RPM | our GPG key (`rpmsign` in the build container) | the RPM header | dnf `gpgcheck=1` in the image build |
+| `rpm-edge-site` repodata | Artifact Keeper managed GPG key (`sign_metadata`) | `repodata/repomd.xml.asc` | dnf `repo_gpgcheck=1` |
+| Proxied Rocky / RKE2 RPMs | upstream vendors | RPM headers (pass through the proxy) | dnf `gpgcheck=1` with vendor keys |
+| `rocky-bootc-base`, `rocky-edge` images | our cosign key, by digest, after push | `oci-bootc` (`sha256-<digest>.sig` tag / referrers) | podman `policy.json` on the build host; Anaconda via `%pre` policy; `bootc upgrade` via policy baked into the image |
+| Public keys (cosign, RPM GPG, Rancher) | n/a | Artifact Keeper hosted raw/generic repo `raw-edge-keys` | fetched by build, kickstart `%pre`, and shipped in the RPM |
+
+Decisions: cosign key pair (not keyless; no OIDC on an edge network). Promotion stays a tag copy,
+because cosign signatures bind to the digest. Install by digest is recorded in findings but the
+demo keeps the floating tag so the day-2 story is unchanged. TLS via Caddy's internal CA is a
+stretch goal; the signature chain is the deliverable.
+
+Gates: (6) unsigned image fails `podman build FROM`, fails kickstart, fails `bootc upgrade`, each
+with the signature error captured; (7) signed images pass all three; (8) `rpm -K` and dnf
+`gpgcheck=1`/`repo_gpgcheck=1` succeed; (9) full install -> boot -> verify -> upgrade -> rollback
+with KVM on the signed images, timings recorded.

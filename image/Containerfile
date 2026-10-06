@@ -3,6 +3,8 @@
 # from the rpm-* proxies / hosted repo. Built by image/build.sh, which renders:
 #   build.repo  -> repos at host.containers.internal:30080 (the host, seen from podman build)
 #   edge.repo   -> repos at 10.0.2.2:30080 (the host, seen from the QEMU VM); shipped in the image
+# Both have gpgcheck=1 everywhere and repo_gpgcheck=1 where the metadata is signed;
+# dnf -y imports the keys from gpgkey= (Rocky's from the base image, the rest from AK).
 ARG BASE_IMAGE=localhost:30080/oci-bootc/rocky-bootc-base:10
 FROM ${BASE_IMAGE}
 
@@ -60,11 +62,21 @@ RUN set -eux; \
 
 # kargs.d: serial console for headless edge hardware (and the QEMU harness).
 # tmpfiles.d: declare package-owned /var directories.
+# etc/containers/policy.json: REPLACES the one from containers-common (default
+#   insecureAcceptAnything) with default "reject" and a sigstoreSigned requirement for
+#   10.0.2.2:30080/oci-bootc/rocky-edge, so `bootc upgrade` refuses unsigned images.
+# etc/containers/registries.d/ak-oci-bootc.yaml: look for cosign .sig attachments there.
+# etc/pki/containers/edge-cosign.pub: the verification key (copied in by build.sh).
 COPY rootfs/ /
 
-# Fail the build if any dnf repo URL does not point at Artifact Keeper (:30080).
+# Fail the build if any dnf repo URL does not point at Artifact Keeper (:30080),
+# counting gpgkey= URLs (local file:///etc/pki/rpm-gpg/ keys are allowed), or if any
+# repo disables gpgcheck.
 RUN set -eu; \
-    bad="$(grep -rhE '^[[:space:]]*(baseurl|mirrorlist|metalink)[[:space:]]*=' /etc/yum.repos.d/ | grep -v ':30080/' || true)"; \
+    bad="$(grep -rhE '^[[:space:]]*(baseurl|mirrorlist|metalink|gpgkey)[[:space:]]*=' /etc/yum.repos.d/ \
+           | sed 's/^[^=]*=//' | tr ' ,' '\n\n' | grep -E '^[a-z]+://' \
+           | grep -v -e ':30080/' -e '^file:///etc/pki/rpm-gpg/' || true)"; \
+    if grep -rqE '^gpgcheck[[:space:]]*=[[:space:]]*0' /etc/yum.repos.d/; then echo "gpgcheck=0 found" >&2; exit 1; fi; \
     if [ -n "$bad" ]; then echo "non-Artifact-Keeper repo URL(s): $bad" >&2; exit 1; fi; \
     echo "repo check OK: $(grep -rhE '^baseurl=' /etc/yum.repos.d/ | wc -l) baseurls, all on :30080"
 

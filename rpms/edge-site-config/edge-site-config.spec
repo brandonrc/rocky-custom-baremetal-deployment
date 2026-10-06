@@ -1,5 +1,7 @@
 # Site configuration for the Rocky Linux image-mode edge PoC.
-# Build: rpmbuild -bb --define "rel 2" edge-site-config.spec   (rpms/build.sh does this)
+# Build: rpmbuild -bb --define "rel 4" edge-site-config.spec   (rpms/build.sh does this)
+# Releases 1/2: unsigned baseline/day-2 (iteration 1). Releases 3/4: the same content,
+# signed with the edge RPM key (rpmsign in rpms/build.sh); 3 = baseline, 4 = day-2.
 %{!?rel: %global rel 1}
 
 Name:           edge-site-config
@@ -34,7 +36,7 @@ sample nginx workload seeded into RKE2's auto-deploy manifests directory.
 # nothing to unpack
 
 %build
-%if %{rel} == 1
+%if %{rel} == 1 || %{rel} == 3
 %global motd_note initial site configuration
 %else
 %global motd_note day-2 update via bootc upgrade (release %{rel})
@@ -75,6 +77,12 @@ install -D -m 0644 %{SOURCE7} %{buildroot}%{_presetdir}/80-edge-site.preset
 %{_presetdir}/80-edge-site.preset
 
 %changelog
+* Tue Oct 06 2026 Brandon Geraci <bgeraci@openteams.com> - 1.0-4
+- Signed day-2 demo (same content as 1.0-2, signed with the edge RPM key)
+
+* Tue Oct 06 2026 Brandon Geraci <bgeraci@openteams.com> - 1.0-3
+- Signed baseline (same content as 1.0-1, signed with the edge RPM key)
+
 * Mon Oct 05 2026 Brandon Geraci <bgeraci@openteams.com> - 1.0-2
 - Day-2 demo: new MOTD text and edge-site/config-release label on nginx-demo
 

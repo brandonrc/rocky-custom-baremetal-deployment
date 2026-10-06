@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Build the Rocky Linux 10 bootc base image from the vendored RESF recipe with
-# ROOTLESS podman, dnf pointed only at Artifact Keeper, then lint and push:
+# ROOTLESS podman, dnf pointed only at Artifact Keeper (gpgcheck=1, repo_gpgcheck=1),
+# then lint, push and cosign-sign by digest:
 #   localhost:30080/oci-bootc/rocky-bootc-base:10
 #   localhost:30080/oci-bootc/rocky-bootc-base:10-<YYYYMMDD>   (immutable tag, image build date UTC)
 #
@@ -30,9 +31,10 @@ cp "$HERE/Containerfile" "$CTX/Containerfile"
 # Only the Rocky BaseOS/AppStream/extras proxies go into the base build.
 awk -v host="$CTR_HOST" '
   /^\[/ { keep = ($0 ~ /^\[rpm-rocky10-/) }
-  keep  { sub(/@HOST@/, host); print }
+  keep  { gsub(/@HOST@/, host); print }
   keep && /^metadata_expire/ { print "" }' "$REPO_IN" > "$CTX/ak-rocky.repo"
-if grep -E '^(baseurl|mirrorlist|metalink)=' "$CTX/ak-rocky.repo" | grep -v ":30080/rpm/" ; then
+if grep -E '^(baseurl|mirrorlist|metalink)=' "$CTX/ak-rocky.repo" | grep -v ":30080/rpm/" \
+   || grep -E '^gpgkey=' "$CTX/ak-rocky.repo" | tr ' ' '\n' | grep -E '^(gpgkey=)?https?://' | grep -v ':30080/' ; then
   echo "base/build.sh: non-Artifact-Keeper URL in ak-rocky.repo" >&2; exit 1
 fi
 rm -f "$CTX/out.ociarchive"
@@ -66,10 +68,17 @@ if [[ "$PUSH" == 1 ]]; then
   # of an old build never mints a misleading new date tag.
   DATE_TAG="10-$(podman image inspect "$LOCAL" --format '{{.Created.UTC.Format "20060102"}}')"
   podman login --tls-verify=false -u admin --password-stdin "$AK" < "$ROOT/registry/.ak-token" >/dev/null
-  podman push --tls-verify=false "$LOCAL" "docker://$IMG:$DATE_TAG"
+  # --remove-signatures: once image/build.sh has pulled the base through the signature
+  # policy, the local image carries the sigstore signatures it was verified with, and a
+  # push from containers-storage (which recompresses layers) refuses with
+  # "Would invalidate signatures". The digest is re-signed below anyway.
+  podman push --remove-signatures --tls-verify=false "$LOCAL" "docker://$IMG:$DATE_TAG"
   # skopeo reuses podman's auth file from the login above.
   skopeo copy --src-tls-verify=false --dest-tls-verify=false \
     "docker://$IMG:$DATE_TAG" "docker://$IMG:10"
   digest=$(skopeo inspect --no-creds --tls-verify=false "docker://$IMG:10" | jq -r .Digest)
   log "pushed $IMG:10 and $IMG:$DATE_TAG ($digest)"
+  # 5. Sign by digest (covers both tags). image/build.sh pulls the base through a
+  #    policy.json that requires this signature (image/setup-host.sh).
+  "$ROOT/signing/sign-image.sh" "$IMG:10"
 fi

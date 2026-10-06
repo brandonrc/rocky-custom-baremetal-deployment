@@ -12,8 +12,11 @@ mkdir -p "$WWW_DIR"
 out="$WWW_DIR/ks.cfg"
 sed -e "s|@REGISTRY@|$REGISTRY|g" \
     -e "s|@IMAGE@|$IMAGE_REF|g" \
+    -e "s|@IMAGE_REPO@|${IMAGE_REF%:*}|g" \
+    -e "s|@SIGNED_REPO@|$HOST_REGISTRY/${IMAGE_REF%:*}|g" \
+    -e "s|@KEY_URL@|$KEY_URL|g" \
     -e "s|@HOSTNAME@|$NODE_HOSTNAME|g" \
     -e "s|@SSH_KEY@|$key|g" \
-    "$DEPLOY_DIR/ks.cfg.in" > "$out"
+    "${KS_TEMPLATE:-$DEPLOY_DIR/ks.cfg.in}" > "$out"
 grep -q '@[A-Z_]*@' "$out" && die "unrendered placeholder left in $out"
 log "rendered $out (image $REGISTRY/$IMAGE_REF, host $NODE_HOSTNAME)"

@@ -12,7 +12,9 @@ and user-mode networking, so it sees the host (and Artifact Keeper) as
 make vm-install    # Anaconda netboot + kickstart -> ostreecontainer pull from AK -> disk
 make vm-boot       # boot disk in background, wait for ssh, wait for node Ready, show status
 make vm-verify     # nginx-demo Running, image pulled via AK's oci-dockerhub-proxy
-make vm-upgrade    # retag rocky-edge:10.2-2 -> :10 in AK, bootc upgrade, reboot, verify
+make vm-upgrade-unsigned  # negative: retag rocky-edge:unsigned-test -> :10, bootc upgrade MUST fail
+                          #   with the signature error, node stays on its image; tag restored
+make vm-upgrade    # retag rocky-edge:10.2-4 -> :10 in AK, bootc upgrade, reboot, verify
 make vm-rollback   # bootc rollback, reboot, verify
 make vm-ssh        # ssh -p 2222 root@localhost
 make vm-status     # one-screen summary
@@ -29,7 +31,11 @@ setting in `lib.sh` can be overridden as an environment or make variable:
 | `IMAGE_REPO` | `oci-bootc` | Artifact Keeper repo key |
 | `REGISTRY` | `10.0.2.2:30080` | registry as seen from the VM |
 | `HOST_REGISTRY` | `localhost:30080` | registry as seen from this host (skopeo) |
-| `PROMOTE_FROM` | `rocky-edge:10.2-2` | `vm-upgrade` retags this to `IMAGE` first; empty = skip |
+| `PROMOTE_FROM` | `rocky-edge:10.2-4` | `vm-upgrade` retags this to `IMAGE` first; empty = skip |
+| `UNSIGNED_FROM` | `rocky-edge:unsigned-test` | what `vm-upgrade-unsigned` promotes |
+| `KEY_URL` | `http://$REGISTRY/api/v1/repositories/raw-edge-keys/download/edge-cosign.pub` | cosign public key fetched by kickstart `%pre` |
+| `STAGE2` | `local` | `local`: installer stage2 (`install.img`, 750 MB) cached in `cache/` and served by `serve-ks.sh`; `mirror`: fetched from dl.rockylinux.org |
+| `KS_TEMPLATE` | `deploy/ks.cfg.in` | kickstart template (experiments) |
 | `VM_SMP` / `VM_MEM` | `6` / `8192` | vCPUs / MiB |
 | `VM_DISK_SIZE` | `40G` | qcow2 virtual size |
 | `SSH_PORT` / `KS_PORT` | `2222` / `8000` | host ports (ssh forward, kickstart http) |
@@ -42,11 +48,12 @@ setting in `lib.sh` can be overridden as an environment or make variable:
 
 | File | What |
 |---|---|
-| `ks.cfg.in` | kickstart template (`@REGISTRY@`, `@IMAGE@`, `@SSH_KEY@`, `@HOSTNAME@`) |
+| `ks.cfg.in` | kickstart template (`@REGISTRY@`, `@IMAGE@`, `@IMAGE_REPO@`, `@SIGNED_REPO@`, `@KEY_URL@`, `@SSH_KEY@`, `@HOSTNAME@`) |
 | `render-ks.sh` | renders it to `state/www/ks.cfg`, reading the public key at render time |
-| `serve-ks.sh` | `python3 -m http.server` on `0.0.0.0:8000` serving only `state/www/` (pid file) |
-| `fetch-media.sh` | caches Rocky 10.2 pxeboot `vmlinuz`/`initrd.img` in `cache/`, sha256-checked against `.treeinfo` |
-| `vm-install.sh` | fresh qcow2 + OVMF vars, headless install, follows Anaconda milestones in the serial log |
+| `serve-ks.sh` | `python3 -m http.server` on `0.0.0.0:8000` serving only `state/www/` (ks.cfg and, with `STAGE2=local`, `os/.treeinfo` + `os/images/install.img` symlinks) |
+| `fetch-media.sh` | caches Rocky 10.2 pxeboot `vmlinuz`/`initrd.img` (and stage2 `install.img`) in `cache/`, sha256-checked against `.treeinfo` |
+| `vm-install.sh` | fresh qcow2 + OVMF vars, headless install, follows Anaconda milestones in the serial log; logs whether the image is cosign-signed; aborts within seconds (exit 1) when the serial log shows a signature/policy error |
+| `vm-upgrade-unsigned.sh` | day-2 negative test (see Flow) |
 | `vm-boot.sh` | daemonized QEMU with `hostfwd tcp::2222-:22`, status report |
 | `vm-verify.sh` | workload + pull-through checks (guest and Artifact Keeper API) |
 | `vm-upgrade.sh`, `vm-rollback.sh` | day-2, with digest assertions |
@@ -60,19 +67,38 @@ kickstart) and `cache/` (install media) are gitignored.
 ## Why it looks like this
 
 - **No ISO.** The installer is the mirror's pxeboot kernel/initrd with
-  `inst.stage2=https://dl.rockylinux.org/pub/rocky/10.2/BaseOS/x86_64/os/`,
-  which is also how a PXE/iPXE bare-metal deployment would boot it.
+  `inst.stage2=http://10.0.2.2:8000/os/` (the mirror's `install.img`, cached and
+  sha256-checked; `STAGE2=mirror` uses
+  `https://dl.rockylinux.org/pub/rocky/10.2/BaseOS/x86_64/os/` directly), which is also how a
+  PXE/iPXE bare-metal deployment would boot it.
 - **`ostreecontainer`, not `bootc`.** The kickstart `bootc` command on Rocky
   10.2 leaves `/root/.ssh` and `/etc/resolv.conf` mislabelled (SELinux AVCs for
   sshd and NetworkManager on first boot). `ostreecontainer` labels correctly.
+- **Signatures are enforced by `policy.json`, not by a kickstart flag.** There is no
+  `--no-signature-verification`. `%pre` writes the installer's
+  `/etc/containers/policy.json` (default `reject`; `@REGISTRY@/oci-bootc/rocky-edge` needs a
+  cosign signature by the edge key, `signedIdentity: exactRepository` =
+  `localhost:30080/oci-bootc/rocky-edge`, the name the signer pushed to), a `registries.d`
+  entry enabling the `sha256-<digest>.sig` lookup, and the public key fetched with `curl`
+  from Artifact Keeper's `raw-edge-keys` repo. Measured: with this policy an unsigned image
+  is refused even if `--no-signature-verification` is added back; with the installer's stock
+  policy an unsigned image installs even without the flag (docs/findings-signing.md).
+  `%post` writes the same three files into the installed system only if the image lacks them
+  (it ships them), so they stay image-managed `/etc` files that later images can update.
+  `bootc upgrade` uses the image's policy: an unsigned `:10` fails with
+  `A signature was required, but no signature exists` and nothing is staged.
 - **Insecure registry.** Artifact Keeper is plain HTTP in this PoC. `%pre`
   writes a `registries.conf.d` drop-in so Anaconda can pull; `%post` writes the
   same into the installed `/etc` so `bootc upgrade` works even if an image
-  forgets to bake it.
-- **TCG.** Without `/dev/kvm` everything runs under TCG (`-cpu max`,
+  forgets to bake it. Signatures protect the content; TLS is a separate step.
+- **KVM vs TCG.** With a usable `/dev/kvm` the scripts use `-accel kvm -cpu host`
+  automatically: install 65 s, ssh 25 s after power-on, RKE2 Ready 61 s later,
+  `bootc upgrade` 6 s + 20 s reboot. Without it everything runs under TCG (`-cpu max`,
   `thread=multi`): Anaconda takes ~5 min to start, the install ~10 min total,
-  ssh ~1 min after power-on, RKE2 Ready ~4.5 min later, reboots ~2.5 min. With a usable `/dev/kvm` the scripts switch to `-accel kvm
-  -cpu host` automatically.
+  ssh ~1 min after power-on, RKE2 Ready ~4.5 min later, reboots ~2.5 min.
+- **Local stage2.** Under KVM the 750 MB `install.img` download from the mirror (about
+  3 MB/s here, 250 s) was 90 % of the time to "Starting installer", so it is cached and
+  served next to the kickstart (`STAGE2=mirror` for the old behaviour).
 - **SSH waits are gentle.** Under slirp every host connection arrives from
   `10.0.2.2`; OpenSSH's `PerSourcePenalties` can block that source after
   repeated failed or aborted attempts. The wait loop uses `BatchMode=yes`,

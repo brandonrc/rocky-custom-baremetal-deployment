@@ -3,8 +3,10 @@
 This directory runs [Artifact Keeper](https://github.com/artifact-keeper/artifact-keeper)
 (release **v1.10.2**) locally with **rootless podman** and bootstraps the
 repositories the rest of the PoC consumes: RPM proxies for Rocky Linux 10 /
-EPEL 10 / k3s / RKE2, a hosted RPM repo for our own packages, a hosted OCI repo for
-bootc images, and quay.io + Docker Hub pull-through proxies.
+EPEL 10 / k3s / RKE2, a hosted RPM repo for our own packages (with Artifact Keeper
+signing its repodata), a hosted OCI repo for bootc images (and their cosign
+signatures), quay.io + Docker Hub pull-through proxies, and a generic repo that
+serves the public keys every consumer verifies with.
 
 ## Layout
 
@@ -16,7 +18,7 @@ bootc images, and quay.io + Docker Hub pull-through proxies.
 | `compose/VERSIONS` | Upstream tag/commit and the image digests actually run |
 | `.env.example` | Template; `up.sh` copies it to `.env` and fills in secrets |
 | `up.sh` / `down.sh` | Start (and wait for `/readyz`) / stop the stack |
-| `bootstrap.sh` | Idempotent: creates repos, mints CI token, writes `out/` |
+| `bootstrap.sh` | Idempotent: creates repos, enables repodata signing on `rpm-edge-site`, mints CI token, writes `out/` |
 | `test/edge-hello.spec` | Trivial noarch RPM used to prove the hosted RPM repo |
 | `VERIFICATION.md` | Exact commands and outputs of the end-to-end checks |
 | `.env`, `.ak-token`, `out/` | Generated, **gitignored** |
@@ -71,9 +73,37 @@ Web UI: http://localhost:30080/ (user `admin`, password in `.env`).
 | `oci-bootc` | docker | local (hosted) | — |
 | `oci-quay-proxy` | docker | remote | https://quay.io |
 | `oci-dockerhub-proxy` | docker | remote | https://registry-1.docker.io |
+| `raw-edge-keys` | generic | local (hosted) | — (public keys, filled by `signing/publish-keys.sh`) |
 
-All are created with `is_public: true`, so anonymous dnf/OCI reads work
+All are created with `is_public: true`, so anonymous dnf/OCI/file reads work
 (edge nodes need no credentials); writes need auth.
+
+### Signing (iteration 2)
+
+- **`rpm-edge-site` repodata is signed by Artifact Keeper.** `bootstrap.sh` creates a
+  server-side OpenPGP key through the signing API and turns on `sign_metadata`:
+  ```
+  POST /api/v1/signing/keys  {"name":"rpm-edge-site repodata","key_type":"gpg","algorithm":"rsa4096",
+                              "repository_id":"<id of rpm-edge-site>","uid_name":"Artifact Keeper rpm-edge-site",
+                              "uid_email":"rpm-edge-site@example.invalid"}
+  POST /api/v1/signing/repositories/<repo id>/config  {"signing_key_id":"<key id>","sign_metadata":true}
+  ```
+  AK then serves `/rpm/rpm-edge-site/repodata/repomd.xml.asc` (detached OpenPGP
+  signature, 7-day expiry, re-signed on demand) and `repomd.xml.key`. `key_type` must be
+  `gpg` for rpm repos. Re-runs detect the existing config and do nothing.
+- **Proxy repos pass the upstream `repomd.xml.asc` through unchanged** (Rocky x3, RKE2 x2
+  verified byte for byte and with the vendor keys). EPEL 10 and Rancher's k3s el9 tree
+  publish none (404 upstream and in AK).
+- **`raw-edge-keys`** (format `generic`) holds `edge-cosign.pub`, `RPM-GPG-KEY-edge`,
+  `RPM-GPG-KEY-Rancher`, `RPM-GPG-KEY-EPEL-10`, downloadable anonymously at
+  `http://<host>:30080/api/v1/repositories/raw-edge-keys/download/<file>`. The backend's
+  native `/general/<key>/<file>` route is not routed by the stock Caddyfile (you get the
+  web UI's 404 page). Paths are write-once (409); deleting needs `delete:artifacts`,
+  which the CI token does not have.
+- **cosign signatures** are stored by the OCI registry as `sha256-<digest>.sig` tags next
+  to the image (classic sigstore attachment). AK's referrers API also works (cosign 3's
+  default bundle format lands there), but podman/bootc cannot read that format.
+  AK itself neither signs nor verifies images.
 
 Notes on upstreams:
 
@@ -116,10 +146,14 @@ podman push  --tls-verify=false localhost:30080/oci-bootc/edge:latest
 
 ### Generated client config (`out/`)
 
-- `out/edge.repo` — dnf repo file for all `rpm-*` repos, `gpgcheck=0` (PoC),
-  `baseurl=http://$HOST:30080/rpm/<key>`; `HOST` defaults to `localhost`.
-- `out/edge.repo.in` — same with an `@HOST@` placeholder, for
-  `sed '/^baseurl=/s/@HOST@/10.0.2.2/'` etc.
+- `out/edge.repo` — dnf repo file for all `rpm-*` repos,
+  `baseurl=http://$HOST:30080/rpm/<key>`, `gpgcheck=1` everywhere, `repo_gpgcheck=1` for
+  Rocky, RKE2 and `rpm-edge-site` (EPEL and k3s do not sign repomd.xml), `gpgkey=` the
+  in-image Rocky key (`file:///etc/pki/rpm-gpg/RPM-GPG-KEY-Rocky-10`) or the
+  `raw-edge-keys` URLs, plus AK's `repomd.xml.key` for `rpm-edge-site`.
+  `HOST` defaults to `localhost`.
+- `out/edge.repo.in` — same with `@HOST@` placeholders (in `baseurl=` and `gpgkey=`), for
+  `sed 's/@HOST@/10.0.2.2/g'` etc.
 - `out/README-urls.md` — every endpoint/URL for the chosen host.
 
 ## Deviations from upstream (and docs-vs-reality notes)

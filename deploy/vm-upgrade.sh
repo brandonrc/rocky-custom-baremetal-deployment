@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # Day-2 upgrade, the way a fleet would see it:
 #   1. "promote" a tested build by retagging it in Artifact Keeper
-#      (PROMOTE_FROM -> IMAGE, e.g. rocky-edge:10.2-2 -> rocky-edge:10);
+#      (PROMOTE_FROM -> IMAGE, e.g. rocky-edge:10.2-4 -> rocky-edge:10). The copy reads
+#      the source through the build-host signature policy, and the cosign signature
+#      (bound to the digest) covers the new tag without re-signing;
 #   2. in the node: bootc upgrade (pulls the new digest for the tracked tag) + reboot;
 #   3. verify the new digest is booted and the old one is the rollback entry.
 # PROMOTE_FROM= (empty) skips step 1 and just upgrades to whatever the tag points at.
 source "$(dirname "$0")/lib.sh"
-PROMOTE_FROM="${PROMOTE_FROM-rocky-edge:10.2-2}"
+PROMOTE_FROM="${PROMOTE_FROM-rocky-edge:10.2-4}"
 TOKEN_FILE="${TOKEN_FILE:-$REPO_ROOT/registry/.ak-token}"
 
 vm_running || die "VM is not running; 'make vm-boot' first"
