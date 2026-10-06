@@ -1,5 +1,10 @@
 # Findings: deploy layer (kickstart -> bootc node -> RKE2 -> day-2)
 
+!!! note "Lab notes"
+    Lab notes from 2026-10-05, kept as recorded. Tags here (`10.2-1`, `10.2-2`) predate signing;
+    the current equivalents are `10.2-3`/`10.2-4`. See the [Findings overview](findings.md)
+    for the summary.
+
 Workstation: 24 cores, 125 GB RAM, **no /dev/kvm** (AMD-V off in BIOS), so every
 VM below runs under QEMU 10.2 TCG (`-accel tcg,thread=multi -cpu max`), 6 vCPU,
 8 GiB, 40G qcow2, OVMF, virtio, slirp networking (host = `10.0.2.2`).
@@ -56,7 +61,7 @@ image-side and both only show up on a real install of a bootc image, never in
 
 ### Run 0: harness shakedown on a stand-in image (`rocky-edge:dev`)
 
-The research agent's k3s bootc image was pushed into Artifact Keeper as
+A stand-in k3s bootc image was pushed into Artifact Keeper as
 `oci-bootc/rocky-edge:dev` and installed with `make vm-install IMAGE=rocky-edge:dev`:
 
 ```
@@ -130,8 +135,9 @@ package bubblewrap is not installed
 
 ostree rebuilds the SELinux policy for the new deployment with `semodule` inside
 bubblewrap. That runs here because `rke2-selinux` adds policy modules. The RESF
-minimal base does not ship `bubblewrap` (fedora-bootc does). The journal is
-volatile on this image, so `journalctl -b -1` had nothing: the diagnosis came from
+minimal base does not ship `bubblewrap` (the fedora-bootc minimal manifests do not list
+it either; the community `rocky-bootc` image added it explicitly, see the image log
+section 7). The journal is volatile on this image, so `journalctl -b -1` had nothing: the diagnosis came from
 the serial log plus `systemctl status ostree-boot-complete`.
 
 **Root-cause proof on the same VM, no image change:** `bootc usr-overlay`
@@ -299,11 +305,46 @@ one was in ContainerCreating with an empty `imageID`, so it reported
 `FAIL: ... digest  not found`. `vm-verify.sh` now waits until `rke2-server` is
 active and every matching pod is Running with READY n/n before it checks digests.
 
+## Install method: ostreecontainer vs the bootc kickstart command
+
+The Rocky 10.2 installer ships anaconda 40.22.3.46 and pykickstart 3.52.12. Both install
+commands validate there, and both install the edge image, but they do it differently:
+
+- `ostreecontainer --url=... --transport=registry` runs `ostree container image deploy`
+  (the exact command line is quoted in the signing log, gate 6:
+  `ostree container image deploy --sysroot=/mnt/sysimage --image=10.0.2.2:30080/oci-bootc/rocky-edge:unsigned-test --transport=registry`).
+- The newer `bootc` command runs `bootc install to-filesystem` against the installer's
+  mounted target. From Anaconda's rhel-10 source:
+
+    ```python
+    bootc_cmd = "bootc"
+    bootc_args = [
+        "install",
+        "to-filesystem",
+    ]
+    ...
+    if not arch.is_s390():
+        bootc_args.append("--bootloader=grub")
+    ```
+
+Two installs of the same image, with kickstarts that differed only in the install command,
+gave different SELinux labels on the installed system:
+
+| | `bootc` | `ostreecontainer` |
+|---|---|---|
+| `/var/roothome/.ssh/authorized_keys` (root's key from `sshkey`) | `var_t` | labelled correctly |
+| `/etc/resolv.conf` | `etc_t` | labelled correctly |
+| first boot | AVC denials blocked sshd and NetworkManager | sshd and NetworkManager fine |
+| `%post` `restorecon -RF` | did not fix it | not needed |
+
+So the kickstart uses `ostreecontainer`. The serial logs of those two installs were not kept
+with the repository; the labels and outcomes above are as recorded at the time.
+
 ## Other observations
 
 - **Digest race when the tag moves mid-install.** `vm-install.sh` logs the tag's
   digest (via `skopeo inspect`) before Anaconda starts, but Anaconda resolves the
-  tag about 5 minutes later. In run 1 the image agent re-pushed `:10` in between,
+  tag about 5 minutes later. In run 1 a concurrent re-push of `:10` landed in between,
   so the logged digest (`05cd8e2d...`) is not the installed one (`96615947...`).
   Treat `bootc status` as authoritative. A real fleet should install by digest
   (`--url=...@sha256:...`) and track the tag afterwards.

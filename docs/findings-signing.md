@@ -1,5 +1,10 @@
 # Findings: iteration 2, sign everything, verify everywhere
 
+!!! note "Lab notes"
+    Lab notes from 2026-10-06, kept as recorded. Tags here (`10.2-1`, `10.2-2`) predate signing;
+    the current equivalents are `10.2-3`/`10.2-4`. See the [Findings overview](findings.md)
+    for the summary.
+
 Run on 2026-10-06 on the same Fedora 44 workstation as iteration 1, now with **`/dev/kvm`
 enabled** (`crw-rw-rw- root /dev/kvm`; `deploy/lib.sh` picked `-accel kvm -cpu host`
 automatically). Rootless podman 5.8.7, skopeo 1.22.3, cosign 3.1.3, GnuPG 2.4.9,
@@ -498,7 +503,7 @@ Not confirmed / gaps:
 - OCI `DELETE` (skopeo delete, admin) removed the scratch test tags from the registry, but the manifests stayed in
   `GET /api/v1/repositories/oci-bootc/artifacts` until deleted through the REST API as well.
 
-## 10. Gotchas (short list for the blog)
+## 10. Gotchas {#10-gotchas-short-list-for-the-blog}
 
 1. cosign 3 defaults (bundle format + referrers + Rekor) are invisible to podman/skopeo/bootc/Anaconda; sign with
    `--new-bundle-format=false --use-signing-config=false --tlog-upload=false` (deprecated flags) or with podman's

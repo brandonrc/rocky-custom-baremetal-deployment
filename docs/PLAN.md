@@ -1,5 +1,7 @@
 # Plan: Rocky Linux image mode on bare metal, with Artifact Keeper as the source of truth
 
+!!! note "Historical design document, kept as written; see [Architecture](architecture.md) for the current state."
+
 Status: design locked 2026-10-05. Implementation tracked in this repo; the write-up lives in
 the OpenTeams engineering blog (branch `post/rocky-custom-baremetal-deployments`).
 

@@ -1,5 +1,10 @@
 # Findings: image layer (registry additions, base, site RPM, edge image)
 
+!!! note "Lab notes"
+    Lab notes from 2026-10-05 and 2026-10-06, kept as recorded. Tags here (`10.2-1`, `10.2-2`) predate signing;
+    the current equivalents are `10.2-3`/`10.2-4`. See the [Findings overview](findings.md)
+    for the summary.
+
 Run on 2026-10-05/06 on the Fedora 44 workstation described in PLAN.md
 (24 cores, rootless podman 5.8.7, skopeo 1.22.3, no sudo, no /dev/kvm),
 against Artifact Keeper 1.10.2 on `localhost:30080`. Times are wall clock.
@@ -291,7 +296,7 @@ Cause:
   `rpm -q --requires ostree ostree-libs bootc` has no bubblewrap dependency on EL10.
 - The fedora-bootc manifests do **not** list it either: neither the pinned submodule
   commit `a4d59995` nor fedora-bootc `main` at `69716e2f` (2026-10-05) mention
-  `bubblewrap`/`bwrap` anywhere. (So the coordinator's guess that fedora-bootc minimal
+  `bubblewrap`/`bwrap` anywhere. (So an earlier assumption that fedora-bootc minimal
   includes it could not be confirmed.) The community image
   `ghcr.io/schmidtw/rocky-bootc:10-minimal` does have `bubblewrap-0.10.0-3.el10`
   installed with no package requiring it, i.e. added explicitly. Our builder stage
@@ -318,7 +323,19 @@ yields `drwxr-sr-x+ root systemd-journal /var/log/journal`.
 Lint still 13 passed / 1 skipped with `--fatal-warnings`; smoke test passes for both releases.
 `:10` was re-pointed to the new `10.2-1` (the deploy test had promoted it to `10.2-2`).
 
-## Docs vs reality / gotchas (short list for the blog)
+## Rocky bootc availability (2026-10-05)
+
+What existed upstream when this was built, and why the base is built here:
+
+- `quay.io/rockylinux/rockylinux` has no `-bootc` tags, and docs.rockylinux.org has no
+  image-mode page.
+- CIQ sells `rlc-bootc` images (Rocky Linux from CIQ) behind a subscription.
+- The community image `ghcr.io/schmidtw/rocky-bootc` is rebuilt daily; it served as the
+  comparison and the planned fallback for the base (section 2).
+- `k3s-selinux` for el10 exists only as a GitHub testing build (`v1.7.testing.4`);
+  Rancher's RPM repository has `rke2-selinux` for EL10 (section 1).
+
+## Gotchas {#docs-vs-reality-gotchas-short-list-for-the-blog}
 
 1. RESF recipe: works rootless as documented; the gotchas are re-runs
    (`--no-cache` because stage 2 deletes its own input) and that the `oci-archive:` path
