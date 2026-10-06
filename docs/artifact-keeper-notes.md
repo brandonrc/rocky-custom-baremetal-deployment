@@ -187,3 +187,26 @@ Afterwards AK serves `repodata/repomd.xml.asc` (`application/pgp-signature`) and
 8. cosign 3's bundle format is stored fine but is invisible to podman/bootc; sign in the
    legacy `.sig` format.
 9. Pin images in the override; the web image has no `1.10.2` tag.
+
+## Filed upstream
+
+Issues opened on 2026-10-06 from the findings above:
+
+- [artifact-keeper#4478](https://github.com/artifact-keeper/artifact-keeper/issues/4478): Stock compose and .env.example ship JWT_SECRET values the backend rejects at startup
+- [artifact-keeper#4479](https://github.com/artifact-keeper/artifact-keeper/issues/4479): Compose uses short image names (postgres, alpine, caddy) that podman resolves per host
+- [artifact-keeper#4480](https://github.com/artifact-keeper/artifact-keeper/issues/4480): Compose publishes Postgres (registry/registry), OpenSearch, Trivy and OpenSCAP on 0.0.0.0
+- [artifact-keeper#4481](https://github.com/artifact-keeper/artifact-keeper/issues/4481): Compose ignores ARTIFACT_KEEPER_VERSION for openscap and has no way to pin the web image
+- [artifact-keeper#4482](https://github.com/artifact-keeper/artifact-keeper/issues/4482): Stock compose does not route /pacman or /bazel, and /general only via unreleased web code
+- [artifact-keeper#4483](https://github.com/artifact-keeper/artifact-keeper/issues/4483): OCI storage_used_bytes and quota ledger count layers twice (image size rows + oci_blobs)
+- [artifact-keeper#4484](https://github.com/artifact-keeper/artifact-keeper/issues/4484): OCI API: identify cosign signatures and referrers as attachments of the subject image
+- [artifact-keeper#4485](https://github.com/artifact-keeper/artifact-keeper/issues/4485): Server-side cosign signing for OCI repositories (legacy .sig format) on push or promotion
+- [artifact-keeper-web#956](https://github.com/artifact-keeper/artifact-keeper-web/issues/956): OCI tag list: show cosign signatures on the signed image instead of as separate tags
+- [artifact-keeper-web#957](https://github.com/artifact-keeper/artifact-keeper-web/issues/957): Repository views: truncated type filter and paths, wrapping sizes and long tag names
+- [artifact-keeper-site#114](https://github.com/artifact-keeper/artifact-keeper-site/issues/114): Quickstart does not start on v1.10.2: no secrets step, create-repo example missing name
+- [artifact-keeper-site#115](https://github.com/artifact-keeper/artifact-keeper-site/issues/115): Docker guide and signing page push to localhost:8080/myapp, missing the repository key
+- [artifact-keeper-site#116](https://github.com/artifact-keeper/artifact-keeper-site/issues/116): System packages guide: /api/artifacts/... uploads 404 and ak publish does not exist
+- [artifact-keeper-site#117](https://github.com/artifact-keeper/artifact-keeper-site/issues/117): Generic format guide documents a /generic/{repo} route that does not exist
+- [artifact-keeper-site#118](https://github.com/artifact-keeper/artifact-keeper-site/issues/118): Signing docs: cosign format podman/bootc can verify, signedIdentity, key API, expiry
+
+Already tracked upstream, not refiled: the OCI by-digest delete leftovers (#4450, fixed by #4464;
+follow-up #4465). Size 0 for image-index rows is intended (#3601).
