@@ -16,7 +16,7 @@ stays generic and a site change is "bump a release, rebuild, `bootc upgrade`".
 
 Release 1 vs 2 differ only in the MOTD note and the `edge-site/config-release`
 label on the nginx Deployment/pod template/Service (`--define "rel N"`).
-Releases 3 and 4 (iteration 2) are the same content as 1 and 2 (3 = baseline MOTD,
+Releases 3 and 4 are the same content as 1 and 2 (3 = baseline MOTD,
 4 = day-2 MOTD; the label carries the release number) but **signed**; uploads are
 write-once per file name, so signed content needed new release numbers.
 `Requires: rke2-server`.

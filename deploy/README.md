@@ -9,6 +9,7 @@ and user-mode networking, so it sees the host (and Artifact Keeper) as
 ## Flow
 
 ```
+make preflight     # host checks: tools, rootless podman, /dev/kvm, vm.max_map_count, SSH key, ports
 make vm-install    # Anaconda netboot + kickstart -> ostreecontainer pull from AK -> disk
 make vm-boot       # boot disk in background, wait for ssh, wait for node Ready, show status
 make vm-verify     # nginx-demo Running, image pulled via AK's oci-dockerhub-proxy
@@ -20,7 +21,11 @@ make vm-ssh        # ssh -p 2222 root@localhost
 make vm-status     # one-screen summary
 make vm-stop       # clean poweroff
 make vm-clean      # stop + delete deploy/state (CLEAN_CACHE=1 also drops the media cache)
+make vm-all        # vm-install vm-boot vm-verify vm-upgrade-unsigned vm-upgrade vm-verify vm-rollback vm-verify
 ```
+
+`make` builds a goal only once per invocation, so repeating `vm-verify` on one command
+line runs it once; `vm-all` runs the scripts in sequence instead.
 
 All targets are thin wrappers over the scripts of the same name. Every
 setting in `lib.sh` can be overridden as an environment or make variable:
@@ -59,6 +64,7 @@ setting in `lib.sh` can be overridden as an environment or make variable:
 | `vm-upgrade.sh`, `vm-rollback.sh` | day-2, with digest assertions |
 | `vm-ssh.sh`, `vm-status.sh`, `vm-stop.sh`, `vm-clean.sh` | the rest |
 | `lib.sh`, `k8s-detect.sh` | shared settings/helpers; RKE2 vs k3s detection |
+| `preflight.sh` | read-only host checks (`make preflight`) |
 | `deploy.mk` | make targets, included by the root `Makefile` |
 
 `state/` (disk, OVMF vars, serial logs, `timings.log`, pid files, rendered
@@ -72,8 +78,9 @@ kickstart) and `cache/` (install media) are gitignored.
   `https://dl.rockylinux.org/pub/rocky/10.2/BaseOS/x86_64/os/` directly), which is also how a
   PXE/iPXE bare-metal deployment would boot it.
 - **`ostreecontainer`, not `bootc`.** The kickstart `bootc` command on Rocky
-  10.2 leaves `/root/.ssh` and `/etc/resolv.conf` mislabelled (SELinux AVCs for
-  sshd and NetworkManager on first boot). `ostreecontainer` labels correctly.
+  10.2 leaves root's `authorized_keys` and `/etc/resolv.conf` mislabelled (SELinux AVCs for
+  sshd and NetworkManager on first boot). `ostreecontainer` labels correctly
+  ([evidence](https://brandonrc.github.io/rocky-custom-baremetal-deployment/findings-deploy/#install-method-ostreecontainer-vs-the-bootc-kickstart-command)).
 - **Signatures are enforced by `policy.json`, not by a kickstart flag.** There is no
   `--no-signature-verification`. `%pre` writes the installer's
   `/etc/containers/policy.json` (default `reject`; `@REGISTRY@/oci-bootc/rocky-edge` needs a
@@ -92,13 +99,11 @@ kickstart) and `cache/` (install media) are gitignored.
   same into the installed `/etc` so `bootc upgrade` works even if an image
   forgets to bake it. Signatures protect the content; TLS is a separate step.
 - **KVM vs TCG.** With a usable `/dev/kvm` the scripts use `-accel kvm -cpu host`
-  automatically: install 65 s, ssh 25 s after power-on, RKE2 Ready 61 s later,
-  `bootc upgrade` 6 s + 20 s reboot. Without it everything runs under TCG (`-cpu max`,
-  `thread=multi`): Anaconda takes ~5 min to start, the install ~10 min total,
-  ssh ~1 min after power-on, RKE2 Ready ~4.5 min later, reboots ~2.5 min.
-- **Local stage2.** Under KVM the 750 MB `install.img` download from the mirror (about
-  3 MB/s here, 250 s) was 90 % of the time to "Starting installer", so it is cached and
-  served next to the kickstart (`STAGE2=mirror` for the old behaviour).
+  automatically, otherwise TCG (`-cpu max`, `thread=multi`); the timeouts are sized for TCG.
+  Numbers: [Timings](https://brandonrc.github.io/rocky-custom-baremetal-deployment/timings/).
+- **Local stage2.** The 750 MB `install.img` is cached and served next to the kickstart,
+  because downloading it from the mirror dominated an install under KVM
+  (`STAGE2=mirror` for the old behaviour).
 - **SSH waits are gentle.** Under slirp every host connection arrives from
   `10.0.2.2`; OpenSSH's `PerSourcePenalties` can block that source after
   repeated failed or aborted attempts. The wait loop uses `BatchMode=yes`,

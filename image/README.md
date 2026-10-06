@@ -14,7 +14,7 @@ writes `/opt/cni/bin`, see docs/findings-image.md section 5).
 | `rocky-edge:10.2-4` | edge-site-config 1.0-4 (signed day-2 demo), cosign-signed |
 | `rocky-edge:10` | floating; points at `10.2-3` after `make push`, move it with `make promote REL=4`; covered by the signature of the digest it points at |
 | `rocky-edge:unsigned-test` | 10.2-4 rebuilt with label `edge.test=unsigned`, **not signed** (`make unsigned-test`; negative tests) |
-| `rocky-edge:10.2-1`, `:10.2-2` | iteration 1, unsigned; refused by the policies now |
+| `rocky-edge:10.2-1`, `:10.2-2` | earlier unsigned builds; refused by the policies now |
 
 From the VM the image is `10.0.2.2:30080/oci-bootc/rocky-edge:10` (anonymous pull).
 
@@ -79,5 +79,4 @@ make promote REL=4    # :10 -> 10.2-4 (what deploy/vm-upgrade.sh also does)
 ```
 
 Note: `make push` always re-points `:10` at `REL` (default 3), so running it
-after a day-2 promote rolls the floating tag back. Timings (iteration 2): 27 s for a
-build that re-runs the OS layer, 8 s for a second release, 1-2 s push and 1 s sign per image.
+after a day-2 promote rolls the floating tag back. Timings: [Timings](https://brandonrc.github.io/rocky-custom-baremetal-deployment/timings/#build-side-no-vm).

@@ -35,13 +35,8 @@ Only Caddy is published on the host:
 Override with `HTTP_PORT` / `HTTPS_PORT` in `.env`. Postgres, OpenSearch, the
 backend (8080) and web (3000) are only reachable on the compose network.
 
-How other parts of the PoC reach it:
-
-| From | Host to use |
-|---|---|
-| this machine | `localhost:30080` |
-| a podman container / `podman build` (rootless, pasta) | `host.containers.internal:30080` (resolves to `169.254.1.2`, verified) |
-| a QEMU/libvirt user-net VM | `10.0.2.2:30080` |
+The host, podman builds and the VM reach it under three different names; see
+[Two views of the same registry](https://brandonrc.github.io/rocky-custom-baremetal-deployment/architecture/#two-views-of-the-same-registry).
 
 ## Usage
 
@@ -60,25 +55,10 @@ Web UI: http://localhost:30080/ (user `admin`, password in `.env`).
 
 ### Repositories created by `bootstrap.sh`
 
-| Key | Format | Type | Upstream |
-|---|---|---|---|
-| `rpm-rocky10-baseos` | rpm | remote | https://dl.rockylinux.org/pub/rocky/10/BaseOS/x86_64/os/ |
-| `rpm-rocky10-appstream` | rpm | remote | https://dl.rockylinux.org/pub/rocky/10/AppStream/x86_64/os/ |
-| `rpm-rocky10-extras` | rpm | remote | https://dl.rockylinux.org/pub/rocky/10/extras/x86_64/os/ |
-| `rpm-epel10` | rpm | remote | https://dl.fedoraproject.org/pub/epel/10/Everything/x86_64/ |
-| `rpm-k3s` | rpm | remote | https://rpm.rancher.io/k3s/stable/common/centos/9/noarch/ (**k3s-selinux only**, el9) |
-| `rpm-rke2-common` | rpm | remote | https://rpm.rancher.io/rke2/stable/common/centos/10/noarch/ (`rke2-selinux`, EL10) |
-| `rpm-rke2-1.36` | rpm | remote | https://rpm.rancher.io/rke2/stable/1.36/centos/10/x86_64/ (`rke2-server`/`-agent`/`-common`, EL10) |
-| `rpm-edge-site` | rpm | local (hosted) | — |
-| `oci-bootc` | docker | local (hosted) | — |
-| `oci-quay-proxy` | docker | remote | https://quay.io |
-| `oci-dockerhub-proxy` | docker | remote | https://registry-1.docker.io |
-| `raw-edge-keys` | generic | local (hosted) | — (public keys, filled by `signing/publish-keys.sh`) |
+Twelve repositories, all created with `is_public: true` (anonymous reads; writes need
+auth). The list with upstreams: [Architecture](https://brandonrc.github.io/rocky-custom-baremetal-deployment/architecture/#artifact-keeper-repositories).
 
-All are created with `is_public: true`, so anonymous dnf/OCI/file reads work
-(edge nodes need no credentials); writes need auth.
-
-### Signing (iteration 2)
+### Signing
 
 - **`rpm-edge-site` repodata is signed by Artifact Keeper.** `bootstrap.sh` creates a
   server-side OpenPGP key through the signing API and turns on `sign_metadata`:

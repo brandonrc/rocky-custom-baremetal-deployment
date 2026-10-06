@@ -61,7 +61,5 @@ as shipped by `rocky-repos`; `image/` replaces them.
 
 ## Verified
 
-Rocky Linux 10.2, kernel `6.12.0-211.61.1.el10_2`, bootc 1.16.4, 242 RPMs,
-68 layers (rpm-ostree chunked), 792 MB uncompressed / 383 MB compressed,
-`bootc container lint`: 13 passed, 1 skipped, 0 warnings. ~3.5 min build.
-See docs/findings-image.md.
+Rocky Linux 10.2, kernel `6.12.0-211.61.1.el10_2`, bootc 1.16.4, 242 RPMs, 68 layers,
+`bootc container lint` clean. Build log and timings: [image build log](https://brandonrc.github.io/rocky-custom-baremetal-deployment/findings-image/#2-base-image-the-resf-recipe-builds-rootless).
