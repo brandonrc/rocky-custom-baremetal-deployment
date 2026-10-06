@@ -1,5 +1,10 @@
 # Walkthrough
 
+!!! tip "Looking for the narrated step-by-step with screenshots?"
+    See the Artifact Keeper walkthrough:
+    <https://artifact-keeper.github.io/walkthroughs/rocky-linux-image-mode-bare-metal/>.
+    This page is the make-target reference.
+
 The whole pipeline is driven by `make` from the repository root. Every target wraps a script
 of the same purpose and is safe to re-run; `make help` lists them. Check the host first with
 [Environment setup](environment.md) and `make preflight`.
