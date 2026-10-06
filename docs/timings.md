@@ -1,18 +1,12 @@
 # Timings
 
-Two complete runs of the VM gates, on the same Fedora 44 workstation (24 cores, 125 GB RAM),
-same VM shape (6 vCPU, 8 GiB, 40 GB qcow2, OVMF, virtio, slirp networking), Artifact Keeper
-v1.10.2 on the same host:
+All numbers are wall clock, on one host (24 cores, 125 GB RAM), with the same VM shape
+(6 vCPU, 8 GiB, 40 GB qcow2, OVMF, virtio, slirp networking) and Artifact Keeper v1.10.2 on
+the same host. The KVM numbers are the canonical ones: signed images, `-accel kvm -cpu host`,
+installer stage2 served locally. Sources: the [signing log](findings-signing.md#timings-kvm-this-run-vs-tcg-iteration-1-run-3),
+the [deploy log](findings-deploy.md#timings) and `deploy/state/timings.log`.
 
-- **KVM**: iteration 2 (signed images, 2026-10-06), `-accel kvm -cpu host`, installer stage2
-  served locally. These are the final numbers.
-- **TCG**: iteration 1, run 3 (unsigned v3 images, 2026-10-05), no `/dev/kvm` (AMD-V was
-  disabled in firmware), `-accel tcg,thread=multi -cpu max`, stage2 fetched from the mirror.
-
-Times are wall clock. Sources: [Findings: signing](findings-signing.md#timings-kvm-this-run-vs-tcg-iteration-1-run-3),
-[Findings: deploy](findings-deploy.md#timings) and `deploy/state/timings.log`.
-
-## Final numbers (KVM)
+## With KVM
 
 | Stage | Time |
 |---|---|
@@ -31,11 +25,16 @@ Times are wall clock. Sources: [Findings: signing](findings-signing.md#timings-k
 The rollback reboot is slower than the upgrade reboot; this was not investigated (no
 stop-job timeouts in the serial log).
 
-## KVM vs TCG, stage by stage
+## KVM vs TCG
+
+TCG is QEMU's software CPU emulation, used when there is no `/dev/kvm`
+(`-accel tcg,thread=multi -cpu max`). The TCG column comes from an earlier full run with
+unsigned images and the installer stage2 fetched from the mirror; the VM steps are otherwise
+the same.
 
 | Stage | KVM | TCG | Notes |
 |---|---|---|---|
-| `vm-install` total | **65 s** | 601 s | KVM run serves stage2 locally |
+| `vm-install` total | **65 s** | 601 s | KVM serves stage2 locally |
 |  - QEMU start to "Starting installer" | 25 s | 315 s | |
 |  - to "Installing the software" | +15 s | +60 s | `%pre` now also fetches the key |
 |  - `ostreecontainer` pull + deploy (74 layers, 463 MB) | 15 s | 195 s | |
@@ -54,20 +53,26 @@ stop-job timeouts in the serial log).
 
 Under KVM the slowest part of an install was downloading the 750 MB installer stage2 from the
 mirror, so `deploy/fetch-media.sh` caches it and `serve-ks.sh` serves it next to the kickstart
-(`STAGE2=mirror` restores the old behaviour).
-
-Earlier TCG install runs: 555 s (stand-in dev image), 600 s (v1), 585 s (v2).
+(`STAGE2=mirror` restores the old behaviour). Under TCG a clean shutdown takes about 90 s.
 
 ## Build side (no VM)
 
 | Step | Time |
 |---|---|
 | `make registry-up`, cold start to `/readyz` | about 60 s |
-| base image (RESF recipe, `minimal`) | 211 s (pristine upstream `standard` recipe: 4 min 53 s) |
+| base image (RESF recipe, `minimal`) | 211 s (upstream `standard` recipe unmodified: 4 min 53 s) |
 | `rpms/build.sh`: build + sign two RPMs | 7 s |
-| edge image, OS layer rebuilt | 27 s (iteration 1: 22-24 s with a cold RKE2 proxy cache) |
-| edge image, second release (OS layer cached) | 8 s |
+| edge image, OS layer rebuilt | 27 s |
+| edge image, further release (OS layer cached) | 8 s |
 | `unsigned-test` image | 1 s |
 | push per image (only new layers) | 1-2 s |
 | cosign sign per image | 1 s |
 | Docker Hub proxy, cold `podman pull nginx:alpine` | 2.2 s |
+
+## Earlier runs
+
+From the lab notes, for comparison only:
+
+- TCG installs of earlier image builds took 555 s (a stand-in k3s image), 600 s and 585 s.
+- The first edge image builds took 22-24 s with a cold RKE2 proxy cache (the RKE2 RPMs were
+  fetched through Artifact Keeper during the build).

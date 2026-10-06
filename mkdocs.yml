@@ -8,13 +8,18 @@ repo_url: https://github.com/brandonrc/rocky-custom-baremetal-deployment
 repo_name: brandonrc/rocky-custom-baremetal-deployment
 edit_uri: edit/main/docs/
 docs_dir: docs
+watch:
+  - includes
 copyright: MIT licensed. Vendored rocky-bootc recipe under its own license.
 
 theme:
   name: material
   features:
     - content.code.copy
+    - navigation.instant
+    - navigation.instant.progress
     - navigation.sections
+    - navigation.tracking
     - navigation.top
     - navigation.footer
     - search.highlight
@@ -53,7 +58,9 @@ markdown_extensions:
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.inlinehilite
-  - pymdownx.snippets
+  - pymdownx.snippets:
+      auto_append:
+        - includes/abbreviations.md
   - pymdownx.superfences:
       custom_fences:
         - name: mermaid
@@ -62,14 +69,25 @@ markdown_extensions:
 
 nav:
   - Home: index.md
-  - Setting up the environment: environment.md
-  - Walkthrough: walkthrough.md
-  - Architecture: architecture.md
-  - Artifact Keeper notes: artifact-keeper-notes.md
-  - Timings: timings.md
-  - Design:
-      - Plan: PLAN.md
-  - Findings:
-      - Image layer: findings-image.md
-      - Deploy layer: findings-deploy.md
-      - Signing (iteration 2): findings-signing.md
+  - Run it:
+      - Environment setup: environment.md
+      - Walkthrough: walkthrough.md
+      - Troubleshooting: troubleshooting.md
+  - Understand it:
+      - Architecture: architecture.md
+      - What Artifact Keeper does here: artifact-keeper.md
+      - Artifact Keeper notes: artifact-keeper-notes.md
+  - Reference:
+      - Timings: timings.md
+      - Glossary: glossary.md
+      - Adapting this to your environment: adapting.md
+  - Lab notes:
+      - Findings overview: findings.md
+      - Image build log: findings-image.md
+      - Deploy log: findings-deploy.md
+      - Signing log: findings-signing.md
+      - Original plan: PLAN.md
+
+validation:
+  links:
+    anchors: warn
